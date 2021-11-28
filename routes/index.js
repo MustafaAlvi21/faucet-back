@@ -35,6 +35,7 @@ const auth = function (req, res, next) {
     }
 }
 
+        console.log("file access");
 
 
 /*  ---------------------------------------------  */
@@ -43,6 +44,8 @@ const auth = function (req, res, next) {
 router.get("/getTX", async(req, res) => {
     const latest  = await web3.eth.getBlockNumber()
     const balance = await web3.eth.getBalance(process.env.SENDER_ACCOUNT)
+
+        console.log("TX route");
     
     count  =  await faucetDataModel.find( {} ).count()
 
