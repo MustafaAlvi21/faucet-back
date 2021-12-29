@@ -9,11 +9,9 @@ const web3 = new Web3(process.env.myRPC);
 
 const basicAuth = require('basic-auth');
 
-const faucetDataModel  = require("../models/allTX");
+const faucetDataModel  = require("../models/faucet");
 
 const moment = require("moment");
-
-
 
 
 /*  ---------------------------------------------  */
@@ -35,7 +33,6 @@ const auth = function (req, res, next) {
     }
 }
 
-        console.log("file access");
 
 
 /*  ---------------------------------------------  */
@@ -45,13 +42,13 @@ router.get("/getTX", async(req, res) => {
     const latest  = await web3.eth.getBlockNumber()
     const balance = await web3.eth.getBalance(process.env.SENDER_ACCOUNT)
 
-        console.log("TX route");
+    console.log("TX route");
     
-    count  =  await faucetDataModel.find( {} ).count()
+    let count  =  await faucetDataModel.find( {} ).count()
 
     faucetDataModel.find({}, {})
     .sort({_id: -1})
-    .limit(5)
+    .limit(4)
     .then((result) => {
         console.log(result);
         console.log(latest);
@@ -74,18 +71,23 @@ router.post("/send-amount", async(req, res) => {
     const addressFrom = process.env.SENDER_ACCOUNT;
     const addressTo = req.body.receiver;
 
-    await faucetDataModel.find( {wallet: addressTo}).sort({_id: -1}).limit(1)
+    const ip_info = get_ip(req);
+    console.log(ip_info.clientIp);
+
+    await faucetDataModel.find( { $or: [{ wallet: { $eq: addressTo } }, { ip: { $eq: ip_info.clientIp } }] } ).sort({_id: -1}).limit(1)
     .then((result) => {
         console.log(result);
 
-        a1 = Date.now()
-        a2 =  result.length > 0 ? result[0].dateTime : 0
+        let a1 = Date.now()
+        let a2 =  result.length > 0 ? result[0].dateTime : 0
         console.log(a2);
-        a3 = ( (a1-a2) / 60000).toFixed()
-        // a3 = a3 == 0 ? 100 : a3;
+
+        let a3 = ( (a1-a2) / 60000).toFixed()
+        let validateMint = 1440;
+
         console.log("a3 => ", a3);
 
-        if((result.length > 0 && a3 >= 5) || (result.length == 0 && a3 >= 0) ){
+        if((result.length > 0 && a3 >= validateMint) || (result.length == 0 && a3 >= 0) ){
 
             web3.eth.getTransactionCount(addressFrom, (err, txCount) => {    
                 const common = Common.default.forCustomChain('mainnet', {
@@ -111,10 +113,11 @@ router.post("/send-amount", async(req, res) => {
                 web3.eth.sendSignedTransaction(raw, (err, txHash) => {
                     if(txHash != null){
                         console.log('txHash:', txHash)
+
                         const myTX = new faucetDataModel({
                             wallet : addressTo,
                             dateTime : Date.now(),
-                            ip : ""
+                            ip : ip_info.clientIp
                         })
                         .save()
                         .then((result) => {

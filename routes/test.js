@@ -1,84 +1,136 @@
-const express = require("express")
-const router = express.Router()
-// const auth = require('../config/auth');
-// var basicAuth = require('basic-auth');
+const express = require("express");
+const router = express.Router();
+const BlockDataModel = require("../models/block");
+const TXDataModel = require("../models/tx");
 
-// const Web3 = require('web3');
-// const abi = require("../build/abi");
-// const Provider = require('@truffle/hdwallet-provider');
-// const binanceRPC = process.env.BINANCE_PROVIDER;
-// const contractAddress = process.env.B_CONTRACT;
-// const address = process.env.SENDER_ACCOUNT;
-// const privateKey = process.env.RRIVATE_KEY;
+const Web3 = require('web3');
+const web3 = new Web3("https://mainnet.infura.io/v3/a4f1407dc85d47329d64aec36d5a5553");
 
 
 
-// /*  ---------------------------------------------  */
-// /*                   Send Token                    */
-// /*  ---------------------------------------------  */
-// router.post("/send-bep20", auth, async(req, res) => {
-//     const provider = new Provider(privateKey, binanceRPC); 
-//     const web3 = new Web3(provider);
-//     const myContract = new web3.eth.Contract(abi, contractAddress);
-//     if(!req.body.receiver || req.body.receiver.length != 42 || req.body.receiver == "0x0000000000000000000000000000000000000000") return res.json("Invalid receiver address")
-//     if(!req.body.tokens || parseInt(req.body.tokens) < 1) return res.json("Invalid token limit")
-//     const receipt = await myContract.methods.transfer(req.body.receiver, parseInt(req.body.tokens)).send({from: address})
-//     .then((result) => {
-//         console.log(result);
-//         return res.json(result);        
-//     }).catch((err) => {
-//         console.log(err);
-//         return res.json(err);            
-//     });
-// })
 
 
-// var Tx = require('ethereumjs-tx').Transaction;
-// const Web3 = require('web3');
-// const provider = new Web3.providers.HttpProvider("https://ropsten.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161");
-// const web3 = new Web3(provider);
 
-// const account1 = '0x8EdfC247F0B750Ca48909a33D52C5B3FBecB7536'; // Your account address 1
-// //const account2 = '' // Your account address 2
-// web3.eth.defaultAccount = account1;
 
-// const privateKey1 = Buffer.from('eab55663c907d292039b4982901a55dd28364b0a103a5e52b0642a3a4f031440', 'hex');
+  /******************************************************/
+ /**                     Get Block                    **/
+/******************************************************/
+router.get("/block", async(req, res) => {
+    const block = await web3.eth.getBlock(13873539)
+    console.log("transactions[0]");
+    console.log(block.transactions.length);
 
-// // const abi = [{"constant":false,"inputs":[{"name":"_greeting","type":"string"}],"name":"greet","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getGreeting","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"}];
+    await new BlockDataModel({
+        gasLimit: block.gasLimit,
+        gasUsed: block.gasUsed,
+        logsBloom: block.logsBloom,
+        receiptsRoot: block.receiptsRoot,
+        sha3Uncles: block.sha3Uncles,
+        parentHash: block.parentHash,
+        difficulty: block.difficulty,
+        extraData: block.extraData,
+        miner: block.miner,
+        mixHash: block.mixHash,
+        number: block.number,
+        timestamp: block.timestamp,
+        transactionsRoot: block.transactionsRoot,
+        uncles: block.uncles,
+        hash: block.hash,
+        nonce: block.nonce,
+        size: block.size,
+        stateRoot: block.stateRoot,
+        totalDifficulty: block.totalDifficulty,
+        totalTransactions: block.transactions.length
+    })
+    .save()
+    .then((tx) => {
+        console.log("------------- tx ------------- ");
+        console.log(tx);
+        saveTX(block)
+    }).catch((err) => {
+        console.log(err);
+        return res.json({"Error": err.message})
+    });
+     
+          
+    async function saveTX(block){
+        console.log("saveTX");
+        // console.log(block);
+        
+        let promises = []
+        const timeOut = async (tx, index) => {
+            return new Promise( async (resolve, reject) => {
+                console.log(index);
+                const TX = await web3.eth.getTransaction(tx)
+                .then( async(txData) => {
+                    console.log(txData);
+                    await new TXDataModel({
+                        type: txData.type,
+                        blockNumber: txData.blockNumber,
+                        from: txData.from,
+                        to: txData.to,
+                        gasPrice: txData.gasPrice,
+                        r: txData.r,
+                        s: txData.s,
+                        v: txData.v,
+                        input: txData.input,
+                        transactionIndex: txData.transactionIndex,
+                        blockHash: txData.blockHash,
+                        gas: txData.gas,
+                        hash: txData.hash,
+                        nonce: txData.nonce,
+                        value: txData.value
+                    })
+                    .save()
+                    .then((result) => {
+                        resolve(`tx: ${index} added`);
+                    }).catch((err) => {
+                        console.log(` ----------------- err => ${index} ----------------- `);
+                        console.log(err);
+                    });
+                }).catch((err) => {
+                    console.log(err);
+                    reject("Something went wrong")
+                });
+            })
+        }
+        
+        
+        await BlockDataModel.updateOne({number: block.number}, {status: "InProgress"})
+        .exec()
+        .then(() => {
+            block.transactions?.forEach((TX, i) => {
+                promises.push(timeOut(TX, i+1)); 
+            });
 
-// // const contract_Address = "0xcbe74e21b070a979b9d6426b11e876d4cb618daf";
+        }).catch((err) => {
+            console.log(err);
+            return res.json({"Error": err.message})
+        });
+        console.log("--------- updated ------------");
+    
 
-// // const myContract = new web3.eth.Contract(abi, contract_Address);
 
-// // const myData = myContract.methods.greet( "hello blockchain devs").encodeABI();
+        Promise.all(promises)
+        .then( async response => {
+            console.log("-------------------------response-------------------------");
+            console.log(response);
+            await BlockDataModel.updateOne({number: block.number}, {status: "complete"})
+            .exec()
+            .then((result) => {
+                res.send("Done!!!")
+            }).catch((err) => {
+                res.json({err})
+            });
+        }).catch(err => console.log(err))
+      
+    }
 
-// web3.eth.getTransactionCount(account1, (err, txCount) => {
-// // Build the transaction
-//   const txObject = {
-//     nonce:    web3.utils.toHex(txCount),
-//     to:       "0x6aC646018d6c82c1e51836658F9ca95885443e1c",
-//     value:    web3.utils.toHex(web3.utils.toWei('0', 'ether')),
-//     gasLimit: web3.utils.toHex(2100000),
-//     gasPrice: web3.utils.toHex(web3.utils.toWei('6', 'gwei')),
-//     // data: myData  
-//   }
-//     // Sign the transaction
-//     const tx = new Tx(txObject);
-//     tx.sign("eab55663c907d292039b4982901a55dd28364b0a103a5e52b0642a3a4f031440");
+    // res.send("Done")
+})
 
-//     const serializedTx = tx.serialize();
-//     const raw = '0x' + serializedTx.toString('hex');
 
-//     // Broadcast the transaction
-//     const transaction = web3.eth.sendSignedTransaction(raw)
-//     .then((result) => {
-//         console.log(result);
-//     }).catch((err) => {
-//         console.log(err);
-//     });
-//     // , (err, tx) => {
-//     //     console.log(tx)
-//     // });
-// });
+
+
 
 module.exports = router;

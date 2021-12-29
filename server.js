@@ -13,12 +13,14 @@ const cors = require('cors')
 /*  ---------------------------------------------  */
 /*                     MongoDB                     */
 /*  ---------------------------------------------  */
-console.log('process.env.DATABASE_URL ' + process.env.DATABASE_URL)
 const mongoose = require('mongoose');
-mongoose.connect(process.env.DATABASE_URL, {useNewUrlParser: true})
+mongoose.connect(process.env.DATABASE_URL)
 const db = mongoose.connection;
 db.on('error', error => console.error(error))
-db.once('open',()  => console.log('Connected Mongo'))
+db.once('open',()  => {
+  console.log('Connected to MongoDB')
+  console.log('process.env.DATABASE_URL ' + process.env.DATABASE_URL)
+})
 
 
 
@@ -33,14 +35,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 
+
 /*  ---------------------------------------------  */
 /*              Route  Middleware                  */
 /*  ---------------------------------------------  */
-const indexRouter = require('./routes/index')
-app.use(('/'), indexRouter);
+const faucetRouter = require('./routes/faucet')
+app.use(('/'), faucetRouter);
 
 const testRouter = require('./routes/test')
 app.use(('/'), testRouter);
+
 
 
 /*  ---------------------------------------------  */
@@ -48,5 +52,7 @@ app.use(('/'), testRouter);
 /*  ---------------------------------------------  */  
 const port1 = 4000
 app.listen(process.env.PORT || port1, async () => {
-  console.log('Prot is running at : ' + process.env.PORT || port1);
+  console.log('-------------------------------------------------');
+  console.log('TetherMoon Node Server is running on Prot : ' + process.env.PORT || port1);
+  console.log('-------------------------------------------------');
 });
